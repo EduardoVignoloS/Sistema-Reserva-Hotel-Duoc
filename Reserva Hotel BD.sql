@@ -5,16 +5,17 @@ DROP TABLE IF EXISTS Notificacion;
 DROP TABLE IF EXISTS Pago;
 DROP TABLE IF EXISTS Reserva;
 DROP TABLE IF EXISTS Habitacion;
-DROP TABLE IF EXISTS Cliente;
+DROP TABLE IF EXISTS Usuario;
 
 Commit;
 
-CREATE TABLE Cliente (
+CREATE TABLE Usuario (
     id_cliente INT AUTO_INCREMENT PRIMARY KEY,
     nombre VARCHAR(100) NOT NULL,
     apellido VARCHAR(100) NOT NULL,
     email VARCHAR(150) UNIQUE NOT NULL,
     telefono VARCHAR(20),
+    typeC ENUM('cliente','admin') DEFAULT 'cliente',
     fecha_registro DATE DEFAULT (CURRENT_DATE)
 );
 
@@ -60,7 +61,7 @@ CREATE TABLE Notificacion (
 
 Commit;
 
-INSERT INTO Cliente (nombre, apellido, email, telefono) VALUES
+INSERT INTO Usuario (nombre, apellido, email, telefono) VALUES
 ('Juan', 'Pérez', 'juan.perez@example.com', '+56911111111'),
 ('María', 'González', 'maria.gonzalez@example.com', '+56922222222'),
 ('Pedro', 'Ramírez', 'pedro.ramirez@example.com', '+56933333333'),
@@ -93,5 +94,4 @@ INSERT INTO Notificacion (id_reserva, mensaje, tipo) VALUES
 
 Commit;
 
-Select * From Cliente;
-Select * From Pago;
+Select * From Usuario;
