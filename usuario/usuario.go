@@ -12,4 +12,5 @@ type Service interface {
 type Repository interface {
 	CreateAccount(ctx context.Context, usuario Usuario) error
 	Login(ctx context.Context, usuario Usuario) (Usuario, error)
+	Query(ctx context.Context, email string) (string, error)
 }

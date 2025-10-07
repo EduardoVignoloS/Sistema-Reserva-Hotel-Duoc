@@ -9,7 +9,7 @@ type UsuarioDB struct {
 	Email          string `db:"email"`
 	Password       string `db:"password"`
 	Telefono       string `db:"telefono"`
-	TypeC          string `db:"typeC"`
+	TypeC          string `db:"typec"`
 	Fecha_Registro string `db:"fecha_registro"`
 }
 

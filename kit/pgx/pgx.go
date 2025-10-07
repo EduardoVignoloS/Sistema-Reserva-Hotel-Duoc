@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/jmoiron/sqlx"
+	"github.com/uptrace/opentelemetry-go-extra/otelsqlx"
 )
 
 const (
@@ -68,18 +69,18 @@ func Open(cfg Config) (*sqlx.DB, error) {
 		q.Set("search_path", cfg.Schema)
 	}
 
-	_ = url.URL{
+	u := url.URL{
 		Scheme:   "postgres",
 		User:     url.UserPassword(cfg.User, cfg.Password),
 		Host:     cfg.Host + ":" + cfg.Port,
 		Path:     cfg.Name,
 		RawQuery: q.Encode(),
 	}
-
-	db, err := sqlx.Open("pgx", "postgresql://postgres:reserva@db.pktpivqgghdfgtwmnske.supabase.co:5432/postgres?pgbouncer=true&pool_mode=transaction")
+	db, err := otelsqlx.Open("pgx", u.String())
 	if err != nil {
 		return nil, err
 	}
+
 	db.SetMaxIdleConns(cfg.MaxIdleConns)
 	db.SetMaxOpenConns(cfg.MaxOpenConns)
 	db.SetConnMaxIdleTime(cfg.IdleConnTimeout)
@@ -240,4 +241,56 @@ func ParseQuery(query string, args any) string {
 	query = strings.ReplaceAll(query, "\n", " ")
 
 	return strings.Trim(query, " ")
+}
+
+// customResult is a custom implementation of sql.Result
+type customResult struct {
+	lastInsertId int64
+	rowsAffected int64
+}
+
+func (r *customResult) LastInsertId() (int64, error) {
+	return r.lastInsertId, nil
+}
+
+func (r *customResult) RowsAffected() (int64, error) {
+	return r.rowsAffected, nil
+}
+
+func RunCUDGetLastID(ctx context.Context, db sqlx.ExtContext, query string, data any) (sql.Result, error) {
+	var result sql.Result
+	var err error
+
+	if strings.Contains(strings.ToUpper(query), "INSERT") {
+		rows, err := sqlx.NamedQueryContext(ctx, db, query, data)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+
+		var id int
+		if rows.Next() {
+			err = rows.Scan(&id)
+			if err != nil {
+				return nil, err
+			}
+		}
+		// Create a custom result to return the inserted ID
+		result = &customResult{lastInsertId: int64(id), rowsAffected: 1}
+	} else {
+		result, err = sqlx.NamedExecContext(ctx, db, query, data)
+		if err != nil {
+			if pqerr, ok := err.(*pgconn.PgError); ok {
+				switch pqerr.Code {
+				case undefinedTable:
+					return nil, ErrUndefinedTable
+				case uniqueViolation:
+					return nil, ErrDBDuplicatedEntry
+				}
+			}
+			return nil, err
+		}
+	}
+
+	return result, nil
 }

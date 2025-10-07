@@ -12,9 +12,14 @@ import (
 
 	"github.com/EduardoVignoloS/Sistema-Reserva-Hotel-Duoc/go-ms-reserva-hotel/kit/logger"
 	"github.com/EduardoVignoloS/Sistema-Reserva-Hotel-Duoc/go-ms-reserva-hotel/kit/tracer"
+	"github.com/EduardoVignoloS/Sistema-Reserva-Hotel-Duoc/go-ms-reserva-hotel/pago"
+	"github.com/EduardoVignoloS/Sistema-Reserva-Hotel-Duoc/go-ms-reserva-hotel/pago/repository/pagodb"
+	"github.com/EduardoVignoloS/Sistema-Reserva-Hotel-Duoc/go-ms-reserva-hotel/reserva"
+	"github.com/EduardoVignoloS/Sistema-Reserva-Hotel-Duoc/go-ms-reserva-hotel/reserva/repository/reservadb"
 	"github.com/EduardoVignoloS/Sistema-Reserva-Hotel-Duoc/go-ms-reserva-hotel/usuario"
 	"github.com/EduardoVignoloS/Sistema-Reserva-Hotel-Duoc/go-ms-reserva-hotel/usuario/repository/usuariodb"
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/cors"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/jmoiron/sqlx"
 )
@@ -49,15 +54,35 @@ func run(ctx context.Context, log *logger.Logger) error {
 	// -----------------------------------------------------------------------
 	// init DB
 
-	db, err := sqlx.Open("pgx", "postgresql://postgres:reserva@db.pktpivqgghdfgtwmnske.supabase.co:5432/postgres?pgbouncer=true&pool_mode=transaction")
+	db, err := sqlx.Open("pgx", "postgresql://pool_ovpq_user:gterb4VES18dEaIyC50VEmzL5twZewmP@dpg-d3himi33fgac739ram8g-a.oregon-postgres.render.com/pool_ovpq")
 	if err != nil {
 		return err
 	}
+	defer db.Close()
+
+	if err := db.PingContext(ctx); err != nil {
+		return fmt.Errorf("db cannot connect: %w", err)
+	}
+
+	// // --- Leer archivo SQL ---
+	// script, err := ioutil.ReadFile("Reserva-Hotel-BD.sql")
+	// if err != nil {
+	// 	fmt.Println("no se pudo leer el archivo SQL: %v", err)
+	// }
+
+	// // --- Ejecutar el script SQL ---
+	// _, err = db.ExecContext(ctx, string(script))
+	// if err != nil {
+	// 	fmt.Println("error al ejecutar el script SQL: %v", err)
+	// }
+
 	// -----------------------------------------------------------------------
 	// Repositories
 
 	var (
 		usuarioRepository = usuariodb.NewRepository(db)
+		reservaRepository = reservadb.NewRepository(db)
+		pagoRepository    = pagodb.NewRepository(db)
 	)
 
 	// -----------------------------------------------------------------------
@@ -65,13 +90,28 @@ func run(ctx context.Context, log *logger.Logger) error {
 
 	var (
 		usuarioService = usuario.NewService(usuarioRepository)
+		reservaService = reserva.NewService(reservaRepository)
+		pagoService    = pago.NewService(pagoRepository, reservaRepository)
 	)
 
 	// -----------------------------------------------------------------------
 	// Routes
 
 	router := chi.NewRouter()
+
+	corsHandler := cors.New(cors.Options{
+		AllowedOrigins:   []string{"http://localhost:3000"},                   // Origen de tu frontend (ajusta si es diferente)
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"}, // Incluye OPTIONS
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type"},
+		AllowCredentials: true, // Si usas cookies/auth
+		MaxAge:           300,  // Tiempo de caché para preflight
+	})
+	// Aplica el middleware al router
+	router.Use(corsHandler.Handler)
+
 	usuario.MakeHandlerWith(usuarioService).SetRoutesTo(router)
+	reserva.MakeHandlerWith(reservaService).SetRoutesTo(router)
+	pago.MakeHandlerWith(pagoService).SetRoutesTo(router)
 
 	// -------------------------------------------------------------------------
 	// HTTP App Server
